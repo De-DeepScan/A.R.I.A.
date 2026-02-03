@@ -2456,3 +2456,35 @@
     padding: 0.6rem 0.8rem;
   }
 }
+
+/* ============================================
+   CONNECTION STATUS INDICATOR
+   ============================================ */
+.connection-status {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  font-size: 0.8rem;
+  z-index: 10;
+  padding: 0.25rem 0.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
+
+.connection-status.connected {
+  border: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.connection-status.disconnected {
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  animation: disconnectedPulse 2s ease-in-out infinite;
+}
+
+@keyframes disconnectedPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

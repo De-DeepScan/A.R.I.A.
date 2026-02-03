@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import "./AriaCat.css";
 import dilemmasData from "../data/dilemmas.json";
+import { gamemaster } from "../gamemaster-client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const faceapi: any;
@@ -63,10 +64,73 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
 
   const dilemmas: Dilemma[] = dilemmasData;
+  const [connected, setConnected] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectIntervalRef = useRef<number | null>(null);
+
+  // Gamemaster integration
+  useEffect(() => {
+    // 1. Register with available actions for backoffice
+    gamemaster.register("aria", "ARIA Cat", [
+      { id: "set_evil", label: "Mode Méchant", params: ["enabled"] },
+      { id: "set_talking", label: "Parler", params: ["enabled"] },
+      { id: "show_dilemma", label: "Afficher Dilemme", params: ["enabled"] },
+      { id: "reset", label: "Réinitialiser" },
+    ]);
+
+    // 2. Connection status
+    gamemaster.onConnect(() => setConnected(true));
+    gamemaster.onDisconnect(() => setConnected(false));
+
+    // 3. Handle commands from backoffice
+    gamemaster.onCommand(({ action, payload }) => {
+      switch (action) {
+        case "set_evil":
+          setIsEvil(payload.enabled as boolean);
+          break;
+        case "set_talking":
+          setIsSpeaking(payload.enabled as boolean);
+          break;
+        case "show_dilemma":
+          if (payload.enabled as boolean) {
+            // Force evil mode and start dilemma
+            setIsEvil(true);
+            setTimeout(() => {
+              setIsChatOpen(true);
+              setShowChoices(true);
+              setDilemmaShock(true);
+              setTimeout(() => setDilemmaShock(false), 800);
+            }, 100);
+          } else {
+            setIsChatOpen(false);
+            setShowChoices(false);
+          }
+          break;
+        case "reset":
+          setIsEvil(false);
+          setIsSpeaking(false);
+          setIsChatOpen(false);
+          setShowChoices(false);
+          setCurrentDilemmaIndex(0);
+          setUserChoices([]);
+          break;
+      }
+    });
+  }, []);
+
+  // Send state updates to backoffice
+  useEffect(() => {
+    gamemaster.updateState({
+      isEvil,
+      isSpeaking,
+      isDilemmaOpen: isChatOpen,
+      currentDilemmaIndex,
+      totalDilemmas: dilemmas.length,
+      userChoices,
+    });
+  }, [isEvil, isSpeaking, isChatOpen, currentDilemmaIndex, userChoices, dilemmas.length]);
 
   // Charger le script et les modèles face-api.js
   useEffect(() => {
@@ -272,9 +336,19 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
 
   const handleChoiceSelect = (choice: Choice) => {
     const currentDilemma = dilemmas[currentDilemmaIndex];
+    const choiceLabel = choice.id === dilemmas[currentDilemmaIndex].choices[0].id ? "A" : "B";
 
     // Save user choice
     setUserChoices(prev => [...prev, { dilemmaId: currentDilemma.id, choiceId: choice.id }]);
+
+    // Send choice to backoffice
+    gamemaster.sendEvent("dilemma_response", {
+      dilemmaId: currentDilemma.id,
+      dilemmaIndex: currentDilemmaIndex + 1,
+      choiceId: choice.id,
+      choiceLabel: choiceLabel,
+      choiceDescription: choice.description,
+    });
 
     // Mark selected choice for animation
     setSelectedChoice(choice.id);
@@ -575,6 +649,11 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
       {/* CRT overlay effects */}
       <div className="crt-overlay"></div>
       <div className="crt-flicker"></div>
+
+      {/* Connection status indicator */}
+      <div className={`connection-status ${connected ? "connected" : "disconnected"}`}>
+        {connected ? "🟢" : "🔴"}
+      </div>
 
       {/* Dilemma Interface - Full Screen */}
       {isEvil && isChatOpen && showChoices && currentDilemmaIndex < dilemmas.length && (
