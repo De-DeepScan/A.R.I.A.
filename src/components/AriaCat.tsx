@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import "./AriaCat.css";
 import dilemmasData from "../data/dilemmas.json";
 import { gamemaster } from "../gamemaster-client";
@@ -36,6 +36,16 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
   const [isRebooting, setIsRebooting] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
 
+  // Random dilemma tracking - indices of dilemmas already shown in current cycle
+  // Using both state (for backoffice updates) and ref (for current value in callbacks)
+  const [seenDilemmaIndices, setSeenDilemmaIndices] = useState<number[]>([]);
+  const seenDilemmaIndicesRef = useRef<number[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    seenDilemmaIndicesRef.current = seenDilemmaIndices;
+  }, [seenDilemmaIndices]);
+
   // Intro speech state
   const [isIntroPlaying, setIsIntroPlaying] = useState(false);
 
@@ -50,12 +60,7 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
       { id: "disable_evil", label: "Désactiver mode méchant" },
       { id: "enable_speaking", label: "Activer parole" },
       { id: "disable_speaking", label: "Désactiver parole" },
-      { id: "dilemma_1", label: "Dilemme 1 - Voiture" },
-      { id: "dilemma_2", label: "Dilemme 2 - Organes" },
-      { id: "dilemma_3", label: "Dilemme 3 - Surveillance" },
-      { id: "dilemma_4", label: "Dilemme 4 - Conscience" },
-      { id: "dilemma_5", label: "Dilemme 5 - Incendie" },
-      { id: "dilemma_6", label: "Dilemme 6 - Remède" },
+      { id: "enable_dilemma", label: "🎲 Dilemme aléatoire" },
       { id: "disable_dilemma", label: "Masquer dilemme" },
       { id: "start_intro", label: "▶ Lancer intro ARIA" },
       { id: "stop_intro", label: "⏹ Stopper intro" },
@@ -66,9 +71,32 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
     gamemaster.onConnect(() => setConnected(true));
     gamemaster.onDisconnect(() => setConnected(false));
 
-    // Helper function to start a specific dilemma
+    // Function to get a random unseen dilemma index (uses ref for current value)
+    const getRandomUnseenDilemmaIndex = (): number => {
+      const allIndices = dilemmas.map((_, index) => index);
+      let currentSeen = seenDilemmaIndicesRef.current;
+
+      // If all dilemmas have been seen, reset
+      if (currentSeen.length >= dilemmas.length) {
+        currentSeen = [];
+        seenDilemmaIndicesRef.current = [];
+        setSeenDilemmaIndices([]);
+      }
+
+      const unseenIndices = allIndices.filter(index => !currentSeen.includes(index));
+      return unseenIndices[Math.floor(Math.random() * unseenIndices.length)];
+    };
+
+    // Helper function to start a specific dilemma and mark it as seen
     const startDilemma = (dilemmaIndex: number) => {
       setCurrentDilemmaIndex(dilemmaIndex);
+      // Mark this dilemma as seen (update both ref and state)
+      const newSeen = seenDilemmaIndicesRef.current.includes(dilemmaIndex)
+        ? seenDilemmaIndicesRef.current
+        : [...seenDilemmaIndicesRef.current, dilemmaIndex];
+      seenDilemmaIndicesRef.current = newSeen;
+      setSeenDilemmaIndices(newSeen);
+
       setIsEvil(true);
       setTimeout(() => {
         setIsChatOpen(true);
@@ -99,24 +127,12 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
         case "disable_speaking":
           setIsSpeaking(false);
           break;
-        case "dilemma_1":
-          startDilemma(0);
+        case "enable_dilemma": {
+          // Get a random unseen dilemma index
+          const randomIndex = getRandomUnseenDilemmaIndex();
+          startDilemma(randomIndex);
           break;
-        case "dilemma_2":
-          startDilemma(1);
-          break;
-        case "dilemma_3":
-          startDilemma(2);
-          break;
-        case "dilemma_4":
-          startDilemma(3);
-          break;
-        case "dilemma_5":
-          startDilemma(4);
-          break;
-        case "dilemma_6":
-          startDilemma(5);
-          break;
+        }
         case "disable_dilemma":
           setIsChatOpen(false);
           setShowChoices(false);
@@ -156,6 +172,8 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
           setShowChoices(false);
           setCurrentDilemmaIndex(0);
           setUserChoices([]);
+          seenDilemmaIndicesRef.current = [];
+          setSeenDilemmaIndices([]);
           setIsIntroPlaying(false);
           break;
       }
@@ -170,20 +188,9 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
       // Réagir aux dilemmes du Labyrinth
       if (message.type === "dilemma-showing") {
         if (message.data?.isShowing) {
-          // Déclencher le mode dilemme sur ARIA
-          setIsEvil(true);
-          setTimeout(() => {
-            setIsChatOpen(true);
-            setShowChoices(true);
-            setDilemmaShock(true);
-            setTimeout(() => setDilemmaShock(false), 800);
-            // Notifier les autres jeux que l'IA ne doit pas parler
-            gamemaster.socket.emit("game-message", {
-              from: "aria",
-              type: "aria-dilemma",
-              data: { isSpeakingAllowed: false }
-            });
-          }, 100);
+          // Déclencher un dilemme aléatoire
+          const randomIndex = getRandomUnseenDilemmaIndex();
+          startDilemma(randomIndex);
         } else {
           setIsChatOpen(false);
           setShowChoices(false);
@@ -212,10 +219,11 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
       isDilemmaOpen: isChatOpen,
       currentDilemmaIndex,
       totalDilemmas: dilemmas.length,
+      seenDilemmasCount: seenDilemmaIndices.length,
       userChoices,
       isIntroPlaying,
     });
-  }, [isEvil, isSpeaking, isChatOpen, currentDilemmaIndex, userChoices, dilemmas.length, isIntroPlaying]);
+  }, [isEvil, isSpeaking, isChatOpen, currentDilemmaIndex, userChoices, dilemmas.length, seenDilemmaIndices.length, isIntroPlaying]);
 
   // Animation de l'oeil gauche-droite uniquement (lente et fluide)
   useEffect(() => {
