@@ -389,6 +389,7 @@ export class GamemasterAudio {
     });
 
     s.on("audio:volume-john", (data: VolumePayload) => {
+      console.log("[gamemaster:audio] Received audio:volume-john:", data);
       this.johnVolume = data.volume;
       this.log("John volume:", Math.round(this.johnVolume * 100) + "%");
       this.applyTtsVolume();
