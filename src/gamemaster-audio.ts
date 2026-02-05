@@ -357,7 +357,7 @@ export class GamemasterAudio {
 
     s.on("audio:play-tts", (data: PlayTTSPayload) => {
       if (!this.config.enabled) return;
-      this.log("Play TTS");
+      console.log("[gamemaster:audio] Play TTS - johnVolume:", this.johnVolume, "masterVolume:", this.masterVolume);
 
       if (this.ttsAudio) this.ttsAudio.pause();
 
@@ -366,6 +366,7 @@ export class GamemasterAudio {
       this.ttsAudio.src = `data:${mimeType};base64,${data.audioBase64}`;
       this.ttsAudio.play().catch((e) => this.log("Play error:", e.message));
       this.applyTtsVolume();
+      console.log("[gamemaster:audio] TTS volume set to:", this.ttsAudio.volume);
 
       this.ttsAudio.onended = () => {
         this.ttsAudio = null;
