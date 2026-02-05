@@ -66,6 +66,7 @@ export class GamemasterAudio {
 
   private masterVolume = 1;
   private iaVolume = 1;
+  private johnVolume = 1;
   private ambientVolume = 1;
 
   private ambientAudios = new Map<string, HTMLAudioElement>();
@@ -168,6 +169,7 @@ export class GamemasterAudio {
     this.socket.off("audio:play-tts");
     this.socket.off("audio:master-volume");
     this.socket.off("audio:volume-ia");
+    this.socket.off("audio:volume-john");
     this.socket.off("audio:stop-all");
     this.socket.off("audio:duck-ambient");
     this.socket.off("audio:unduck-ambient");
@@ -185,7 +187,7 @@ export class GamemasterAudio {
 
   private applyTtsVolume(): void {
     if (this.ttsAudio) {
-      this.ttsAudio.volume = Math.min(1, this.iaVolume * this.masterVolume);
+      this.ttsAudio.volume = Math.min(1, this.johnVolume * this.masterVolume);
     }
   }
 
@@ -382,8 +384,13 @@ export class GamemasterAudio {
 
     s.on("audio:volume-ia", (data: VolumePayload) => {
       this.iaVolume = data.volume;
-      this.log("IA volume:", Math.round(this.iaVolume * 100) + "%");
+      this.log("IA (ARIA) volume:", Math.round(this.iaVolume * 100) + "%");
       this.applyPresetVolume();
+    });
+
+    s.on("audio:volume-john", (data: VolumePayload) => {
+      this.johnVolume = data.volume;
+      this.log("John volume:", Math.round(this.johnVolume * 100) + "%");
       this.applyTtsVolume();
     });
 
@@ -416,8 +423,10 @@ export class GamemasterAudio {
 
       // Save and reduce preset volumes (ARIA voice)
       for (const [presetIdx, audio] of this.presetAudios) {
-        this.savedPresetVolumes.set(presetIdx, audio.volume);
-        audio.volume = Math.min(1, audio.volume * factor);
+        const oldVolume = audio.volume;
+        this.savedPresetVolumes.set(presetIdx, oldVolume);
+        audio.volume = Math.min(1, oldVolume * factor);
+        console.log(`[gamemaster:audio] Preset ${presetIdx}: volume ${oldVolume} -> ${audio.volume}`);
       }
 
       // Save and reduce TTS volume (ARIA TTS)
