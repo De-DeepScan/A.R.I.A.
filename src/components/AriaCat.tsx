@@ -97,24 +97,17 @@ export function AriaCat({ isThinking = false, message }: AriaCatProps) {
       seenDilemmaIndicesRef.current = newSeen;
       setSeenDilemmaIndices(newSeen);
 
-      // Get the dilemma description for TTS
-      const selectedDilemma = dilemmas[dilemmaIndex];
-
       setIsEvil(true);
       setTimeout(() => {
         setIsChatOpen(true);
         setShowChoices(true);
         setDilemmaShock(true);
         setTimeout(() => setDilemmaShock(false), 800);
-        // Notifier les autres jeux avec la description du dilemme pour TTS
+        // Notifier les autres jeux que l'IA ne doit pas parler
         gamemaster.socket.emit("game-message", {
           from: "aria",
-          type: "aria-dilemma-start",
-          data: {
-            isSpeakingAllowed: false,
-            dilemmaIndex,
-            dilemmaDescription: selectedDilemma.description
-          }
+          type: "aria-dilemma",
+          data: { isSpeakingAllowed: false }
         });
       }, 100);
     };
